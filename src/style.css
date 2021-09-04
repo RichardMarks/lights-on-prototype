@@ -1,0 +1,22 @@
+* {
+  font-family: Lato;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+svg text {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+svg text::selection {
+  background: none;
+}
