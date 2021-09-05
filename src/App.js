@@ -10,66 +10,84 @@ import './style.css';
 const WIDTH = 512;
 const HEIGHT = 512;
 
-const rowCount = 4;
-const colCount = 4;
+const rowCount = 5;
+const colCount = 5;
 const numCells = rowCount * colCount;
 
 const spacing = 4;
 const cellWidth = (WIDTH - spacing) / colCount;
 const cellHeight = (HEIGHT - spacing) / rowCount;
 
-export const getAffectedCoordinates = (column, row) => {
-  const affected = [[column, row], [0, 0]];
+export const getColumnRowFromIndex = index => {
+  const column = ~~(index % colCount);
+  const row = ~~(index / colCount);
+  return { column, row };
+};
 
-  if (column === 0) {
-    // first column
-    affected.push([1, 0]);
-    if (row === 0) {
-      // first row
-      affected.push([0, 1]);
-    } else if (row === rowCount - 1) {
-      // last row
-      affected.push([0, -1]);
-    } else {
-      // middle row
-      affected.push([0, -1], [0, 1]);
-    }
-  } else if (column === colCount - 1) {
-    // last column
-    affected.push([-1, 0]);
-    if (row === 0) {
-      // first row
-      affected.push([0, 1]);
-    } else if (row === rowCount - 1) {
-      // last row
-      affected.push([0, -1]);
-    } else {
-      // middle row
-      affected.push([0, -1], [0, 1]);
-    }
-  } else {
-    // middle column
-    affected.push([-1, 0]);
-    if (row === 0) {
-      // first row
-      affected.push([1, 0], [0, 1]);
-    } else if (row === rowCount - 1) {
-      // last row
-      affected.push([1, 0], [0, -1]);
-    } else {
-      // middle row
-      affected.push([1, 0], [0, 1], [0, -1]);
-    }
+export const getPuzzleCellIdFromCooordinate = (column, row) =>
+  `${column}_${row}`;
+
+export const decodeMagicValueToTable = magicValue =>
+  magicValue
+    .toString(2)
+    .split('')
+    .map(Number);
+
+export const magicValues = [0x15a82b5, 0x1b06c1b].map(decodeMagicValueToTable);
+
+export const puzzleStateToCheckTable = state => {
+  const check = [];
+
+  for (let i = 0; i < numCells; i++) {
+    const { column, row } = getColumnRowFromIndex(i);
+    const id = getPuzzleCellIdFromCooordinate(column, row);
+    check.push(state[id] ? 0 : 1);
   }
 
+  return check;
+};
+
+export const compareCheckTableAgainstMagicValueTable = (
+  check,
+  magicValueTable
+) => {
+  let dotProduct = 0;
+
+  for (let i = 0; i < numCells; i++) {
+    dotProduct = (dotProduct + check[i] * magicValueTable[i]) % 2;
+  }
+
+  return dotProduct === 0;
+};
+
+export const isPuzzleSolvable = state => {
+  const check = puzzleStateToCheckTable(state);
+
+  return (
+    compareCheckTableAgainstMagicValueTable(check, magicValues[0]) &&
+    compareCheckTableAgainstMagicValueTable(check, magicValues[1])
+  );
+};
+
+export const getAffectedCoordinates = (column, row) => {
+  const affected = [[column, row], [0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]];
   return affected;
 };
 
+export const isOutOfBounds = (column, row) => ([dx, dy]) =>
+  !(
+    column + dx < 0 ||
+    column + dx >= colCount ||
+    row + dy < 0 ||
+    row + dy >= rowCount
+  );
+
 export const applyAffectedCoordinatesToState = (affected, state) => {
   const [column, row] = affected.shift();
-  const nextState = affected.reduce(
+  const outOfBounds = isOutOfBounds(column, row);
+  const nextState = affected.filter(outOfBounds).reduce(
     (s, [dx, dy]) => {
-      const id = `${column + dx}_${row + dy}`;
+      const id = getPuzzleCellIdFromCooordinate(column + dx, row + dy);
       const lastValue = Boolean(s[id]);
       return { ...s, [id]: !lastValue };
     },
@@ -107,15 +125,15 @@ export const calculatePuzzleCellsFromState = state => {
   const cells = [];
 
   for (let i = 0; i < numCells; i++) {
-    const colIndex = ~~(i % colCount);
-    const rowIndex = ~~(i / colCount);
-    const id = `${colIndex}_${rowIndex}`;
+    const { column, row } = getColumnRowFromIndex(i);
+    const id = getPuzzleCellIdFromCooordinate(column, row);
+
     const cell = {
       id,
-      column: colIndex,
-      row: rowIndex,
-      x: spacing + colIndex * cellWidth,
-      y: spacing + rowIndex * cellHeight,
+      column,
+      row,
+      x: spacing + column * cellWidth,
+      y: spacing + row * cellHeight,
       width: cellWidth - spacing,
       height: cellHeight - spacing,
       color: state[id] ? 'seagreen' : 'black',
