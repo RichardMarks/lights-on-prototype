@@ -3,7 +3,9 @@ import React, {
   useCallback,
   useMemo,
   useReducer,
-  useEffect
+  useEffect,
+  createContext,
+  useContext
 } from 'react';
 import './style.css';
 
@@ -41,7 +43,7 @@ export const puzzleStateToCheckTable = state => {
   for (let i = 0; i < numCells; i++) {
     const { column, row } = getColumnRowFromIndex(i);
     const id = getPuzzleCellIdFromCooordinate(column, row);
-    check.push(state[id] ? 0 : 1);
+    check.push(state[id] ? 1 : 0);
   }
 
   return check;
@@ -108,6 +110,11 @@ const puzzleReducerActionHandlers = {
 
   FLIP(state, action) {
     return flipLogic(state, action.column, action.row);
+  },
+
+  FLIP_SINGLE(state, action) {
+    const { column, row } = action;
+    return applyAffectedCoordinatesToState([[column, row], [0, 0]], state);
   }
 };
 
@@ -159,9 +166,17 @@ export const usePuzzleReducer = () => {
     [dispatch]
   );
 
+  const flipSingle = useCallback(
+    (column, row) => {
+      dispatch({ column, row, type: 'FLIP_SINGLE' });
+    },
+    [dispatch]
+  );
+
   return {
     state,
     flip,
+    flipSingle,
     reset
   };
 };
@@ -201,27 +216,44 @@ export const PuzzleCellView = ({ cell, flip }) => {
 };
 
 export const PuzzleView = ({ width, height }) => {
+  const editor = usePuzzleEditorContext();
   const [cleared, setCleared] = useState(false);
-  const puzzle = usePuzzleState();
+
+  const puzzle = editor.puzzle;
+
+  const onCellClick = useMemo(() => {
+    if (editor.editorMode === 'play') {
+      if (cleared) {
+        return () => {};
+      }
+      return puzzle.puzzle.flip;
+    }
+    return puzzle.puzzle.flipSingle;
+  }, [editor.editorMode, cleared, puzzle.puzzle.state]);
 
   useEffect(() => {
+    if (editor.editorMode === 'editor') {
+      return;
+    }
     const numLights = puzzle.cells.filter(cell => cell.lit).length;
     if (numLights === numCells) {
       setCleared(true);
     }
-  }, [puzzle.cells]);
+  }, [puzzle.cells, editor.editorMode]);
 
   const viewBox = `0 0 ${width} ${height}`;
 
   return (
     <svg viewBox={viewBox} width={width} height={height}>
-      <rect x={0} y={0} width={width} height={height} fill="white" />
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        fill={editor.editorMode === 'editor' ? 'red' : 'white'}
+      />
       {puzzle.cells.map(cell => (
-        <PuzzleCellView
-          key={cell.id}
-          cell={cell}
-          flip={cleared ? () => {} : puzzle.puzzle.flip}
-        />
+        <PuzzleCellView key={cell.id} cell={cell} flip={onCellClick} />
       ))}
 
       {cleared && (
@@ -271,6 +303,62 @@ export const PuzzleView = ({ width, height }) => {
   );
 };
 
+export const PuzzleEditorContext = createContext({});
+export const usePuzzleEditorContext = () => useContext(PuzzleEditorContext);
+
+export const PuzzleEditorContextProvider = ({ children }) => {
+  const [editorMode, setEditorModeState] = useState('play');
+  const puzzle = usePuzzleState();
+
+  const setEditorMode = useCallback(changeEvent => {
+    setEditorModeState(changeEvent.target.value);
+  }, []);
+
+  const isSolvable = useMemo(() => {
+    return isPuzzleSolvable(puzzle.puzzle.state);
+  }, [editorMode, puzzle.puzzle.state]);
+
+  const contextValue = {
+    editorMode,
+    setEditorMode,
+    isSolvable,
+    puzzle
+  };
+
+  return (
+    <PuzzleEditorContext.Provider value={contextValue}>
+      {children}
+    </PuzzleEditorContext.Provider>
+  );
+};
+
+export const PuzzleEditorToolbar = () => {
+  const editor = usePuzzleEditorContext();
+
+  return (
+    <div style={{ display: 'flex', marginBottom: 10 }}>
+      <label style={{ marginRight: 10 }}>Mode:</label>
+      <select
+        style={{ flex: 1 }}
+        value={editor.editorMode}
+        onChange={editor.setEditorMode}
+      >
+        <option value="play">Play Game</option>
+        <option value="editor">Edit Puzzle</option>
+      </select>
+      <div style={{ flex: 1 }} />
+      <label>Solvable Puzzle: {editor.isSolvable ? 'Yes' : 'No'}</label>
+    </div>
+  );
+};
+
 export default function App() {
-  return <PuzzleView width={WIDTH} height={HEIGHT} />;
+  return (
+    <div>
+      <PuzzleEditorContextProvider>
+        <PuzzleEditorToolbar />
+        <PuzzleView width={WIDTH} height={HEIGHT} />
+      </PuzzleEditorContextProvider>
+    </div>
+  );
 }
